@@ -157,9 +157,9 @@ def healthz(request):
 @api_view(["GET"])
 def metadata(request):
     return Response({
-        "team_name":    "Your Name Here",
-        "team_members": ["Your Name Here"],
-        "model":        "claude-sonnet-4-20250514",
+        "team_name":    "individual",
+        "team_members": ["Rajeev"],
+        "model":        "anthropic/claude-3-haiku",
         "approach":     "4-layer structured prompt composer — merchant + category + trigger + customer injected directly into LLM prompt. No vector DB needed; data already structured JSON.",
         "version":      "1.0.0",
     })
