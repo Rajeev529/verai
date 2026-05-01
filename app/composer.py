@@ -12,7 +12,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# ── LLM + Chain (OpenRouter) ──────────────────────────────────────────────────
+# ── LLM + Chain ───────────────────────────────────────────────────────────────
 llm = ChatOpenAI(
     model="anthropic/claude-3-haiku",
     openai_api_key=os.getenv("OPENROUTER_API_KEY", ""),
@@ -25,7 +25,7 @@ prompt = PromptTemplate(
     input_variables=["merchant", "category", "trigger", "customer"],
     template="""
 You are Vera — magicpin's AI growth assistant for local merchants.
-Compose ONE sharp outbound message using the context below.
+Compose ONE sharp WhatsApp nudge for this merchant.
 
 MERCHANT CONTEXT:
 {merchant}
@@ -41,18 +41,32 @@ CUSTOMER CONTEXT:
 
 STRICT RULES:
 1. Max 320 characters for body
-2. Use REAL numbers from context — name, CTR, offer price, customer count
-3. No URLs in body
-4. Exactly ONE clear CTA (yes/no question or single action)
-5. Do NOT be generic — always mention merchant name + one specific fact
-6. Match the tone from CATEGORY CONTEXT
+2. Use ONLY the merchant's own city/locality — never use another city's data
+3. Use merchant's EXACT business name from context
+4. Use REAL numbers: merchant's own CTR, offer price, customer count
+5. ONE idea only — do not overload with multiple stats
+6. Tone: suggestive, not pushy — "Would you like to..." not "It's time to act"
+7. End with a single yes/no question CTA
+8. suppression_key format: "kind:merchant_id:YYYY-WXX"
+9. Write message in ENGLISH ONLY — no Hindi, no Hinglish
 
-Return ONLY a valid JSON object — no markdown, no extra text:
+GOOD EXAMPLES(do not copy exact wording):
+- "Dr. Meera, 190 people in Lajpat Nagar are searching 'Dental Check Up' today. Your ₹299 offer is ready — shall I send it?"
+- "Bharat, calls have dropped 50% in 7 days. Demand is strong nearby — would you like to try a targeted offer?"
+- "Hi Ramesh, switching chronic patients to generic metformin could save them ~₹120/month. Shall I identify eligible patients?"
+
+BAD EXAMPLES (avoid):
+- Mixing cities: Mumbai merchant + Delhi demand data
+- Pushy tone: "It's time to act now!"
+- Overloaded: mentioning CTR + peer stats + patient count + savings all in one message
+- Wrong name: merchant name differs from their actual business name
+
+Return ONLY valid JSON — no markdown:
 {{
   "body": "...",
   "cta": "open_ended",
-  "suppression_key": "...",
-  "rationale": "one line why this message now"
+  "suppression_key": "kind:merchant_id:2026-W18",
+  "rationale": "one line — what trigger + why now"
 }}
 """,
 )
@@ -85,10 +99,13 @@ def pick_best_trigger(merchant_payload, available_triggers, all_triggers):
 def _merchant_block(m):
     p      = m.get("performance", {})
     offers = [o["title"] for o in m.get("offers", []) if o.get("status") == "active"]
+    identity = m.get("identity", {})
     return (
-        f"Name: {m.get('identity',{}).get('name')} | "
-        f"Owner: {m.get('identity',{}).get('owner_first_name')} | "
-        f"City: {m.get('identity',{}).get('city')} | "
+        f"Business name: {identity.get('name')} | "
+        f"Owner: {identity.get('owner_first_name')} | "
+        f"City: {identity.get('city')} | "
+        f"Locality: {identity.get('locality')} | "
+        f"Merchant ID: {m.get('merchant_id')} | "
         f"CTR: {p.get('ctr')} | Views: {p.get('views')} | Calls: {p.get('calls')} | "
         f"7d delta: {p.get('delta_7d',{})} | "
         f"Active offers: {offers or 'none'} | "
@@ -105,7 +122,8 @@ def _category_block(c):
     return (
         f"Category: {c.get('display_name')} | "
         f"Tone: {c.get('voice',{}).get('tone')} | "
-        f"Peer avg CTR: {peer.get('avg_ctr')} | Peer avg calls: {peer.get('avg_calls_30d')} | "
+        f"Peer avg CTR: {peer.get('avg_ctr')} | "
+        f"Peer avg calls: {peer.get('avg_calls_30d')} | "
         f"Top insight: {digest.get('title','')} — {digest.get('actionable','')}"
     )
 
@@ -115,6 +133,7 @@ def _trigger_block(t):
     return (
         f"Kind: {p.get('kind', t.context_id)} | "
         f"Urgency: {p.get('urgency', 1)} | "
+        f"Merchant ID this trigger belongs to: {p.get('merchant_id','')} | "
         f"Details: {json.dumps(p)[:300]}"
     )
 
@@ -151,6 +170,6 @@ def compose_message(merchant_payload, category_payload, trigger_obj, customer_pa
     return {
         "body":            "Quick update for your business — want me to share details?",
         "cta":             "open_ended",
-        "suppression_key": f"fallback:{merchant_payload.get('merchant_id','?')}",
+        "suppression_key": f"fallback:{merchant_payload.get('merchant_id','?')}:2026-W18",
         "rationale":       "LLM fallback",
     }
