@@ -23,9 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-&b-0-ml66kwzqw#+*jit7r2qwj9jzr2-^u(@51c_)==xt_yxk3'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['verai-production-66d2.up.railway.app']
+CSRF_TRUSTED_ORIGINS="verai-production-66d2.up.railway.app"
 
 
 # Application definition
