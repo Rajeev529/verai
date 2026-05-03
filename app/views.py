@@ -107,31 +107,59 @@ def tick(request):
 def reply(request):
     message     = request.data.get("message", "").lower()
     turn_number = request.data.get("turn_number", 1)
+    from_role   = request.data.get("from_role", "merchant")  # merchant ya customer
 
-    positive = ["yes", "haan", "ok", "sure", "send", "draft", "go", "please", "kar", "karo", "bhejo", "acha"]
-    negative = ["no", "nahi", "nope", "later", "stop", "cancel", "mat", "ruko", "hold"]
+    positive = ["yes", "ok", "sure", "send", "go", "please", "book", "confirm", "wed", "thu", "slot"]
+    negative = ["no", "nope", "stop", "cancel", "spam", "later", "dont", "not"]
 
-    if any(w in message for w in positive):
-        body = "Sending now! I'll also prepare a follow-up for non-responders." if turn_number <= 2 \
-               else "Done — campaign live. I'll share performance in 24 hours."
+    # ── AUTO-REPLY DETECTION ─────────────────────
+    # Turn 2+ with no clear intent → end
+    if turn_number >= 2 and not any(w in message for w in positive + negative):
         return Response({
-            "action":    "send",
-            "body":      body,
-            "rationale": "Merchant accepted — proceeding with action",
+            "action":    "end",
+            "body":      "",
+            "rationale": "Auto-reply detected — no engagement after multiple turns",
         })
 
+    # ── CUSTOMER ROLE ────────────────────────────
+    if from_role == "customer":
+        if any(w in message for w in positive):
+            return Response({
+                "action":    "send",
+                "body":      "Perfect! Sending the campaign now to nearby customers. I'll share a performance update in 24 hours.",
+                "rationale": "Merchant accepted",
+            })
+        if any(w in message for w in negative):
+            return Response({
+                "action":    "end",
+                "body":      "No problem! Feel free to reach out when you're ready.",
+                "rationale": "Customer declined",
+            })
+        return Response({
+            "action":    "wait",
+            "body":      "Could you confirm if you'd like to book the slot?",
+            "rationale": "Customer intent unclear",
+        })
+
+    # ── MERCHANT ROLE ────────────────────────────
+    if any(w in message for w in positive):
+        return Response({
+            "action":    "send",
+            "body":      "On it! Campaign is going out now. I'll share performance in 24 hours.",
+            "rationale": "Merchant accepted",
+        })
     if any(w in message for w in negative):
         return Response({
             "action":    "end",
             "body":      "",
-            "rationale": "Merchant declined — closing session cleanly",
+            "rationale": "Merchant declined",
         })
 
-    # Unclear / question
+    # Turn 1 unclear → wait once
     return Response({
         "action":    "wait",
-        "body":      "Got it — should I go ahead and send, or would you like to review first?",
-        "rationale": "Intent unclear — asking single clarifying question",
+        "body":      "Should I go ahead and send this, or would you like to review first?",
+        "rationale": "Intent unclear — waiting once",
     })
 
 
