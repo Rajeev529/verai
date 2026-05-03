@@ -57,26 +57,34 @@ def tick(request):
     available_triggers = request.data.get("available_triggers", [])
     actions = []
 
-    merchants   = ContextStore.objects.filter(scope="merchant")[:20]
+    merchants    = ContextStore.objects.filter(scope="merchant")[:20]
     all_triggers = list(ContextStore.objects.filter(scope="trigger"))
+
+    seen_merchants = set()
+    used_triggers  = set()
 
     for merchant in merchants:
         if len(actions) >= 20:
             break
 
+        if merchant.context_id in seen_merchants:
+            continue
+        seen_merchants.add(merchant.context_id)
+
         m_payload = merchant.payload
         cat_slug  = m_payload.get("category_slug", "")
 
-        # Load category context
-        cat_obj = ContextStore.objects.filter(scope="category", context_id=cat_slug).first()
-        cat_payload = cat_obj.payload if cat_obj else {"display_name": cat_slug, "voice": {}, "peer_stats": {}, "digest": []}
+        cat_obj     = ContextStore.objects.filter(scope="category", context_id=cat_slug).first()
+        cat_payload = cat_obj.payload if cat_obj else {
+            "display_name": cat_slug, "voice": {}, "peer_stats": {}, "digest": []
+        }
 
-        # Pick best trigger
-        best_trigger = pick_best_trigger(m_payload, available_triggers, all_triggers)
+        remaining_triggers = [t for t in available_triggers if t not in used_triggers]
+        best_trigger = pick_best_trigger(m_payload, remaining_triggers, all_triggers)
         if not best_trigger:
             continue
+        used_triggers.add(best_trigger.context_id)
 
-        # Load optional customer context
         cust_payload = None
         cust_id = best_trigger.payload.get("customer_id")
         if cust_id:
